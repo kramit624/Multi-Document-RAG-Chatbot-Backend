@@ -11,7 +11,6 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = FastAPI(title="Multi-Doc RAG API")
 
-# 🔥 CORS FIRST
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -20,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🔥 OPTIONS HANDLER (CRITICAL)
+
 @app.options("/{path:path}")
 async def options_handler(path: str):
     return {}
@@ -43,14 +42,22 @@ async def upload_pdf(file: UploadFile | None = File(None)):
         with open(path, "wb") as f:
             f.write(content)
 
-        result = ingest_pdf(path)
-
         return {
-            "status": "success",
-            "filename": file.filename,
-            **result
+            "status": "uploaded",
+            "filename": file.filename
         }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ingest")
+def ingest():
+    try:
+        result = ingest_pdf(UPLOAD_DIR)
+        return {
+            "status": "ingested",
+            **result
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -59,7 +66,7 @@ async def upload_pdf(file: UploadFile | None = File(None)):
 def ask(payload: QuestionRequest):
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
-    
+
     try:
         answer = answer_question(payload.question)
         return {
@@ -67,15 +74,15 @@ def ask(payload: QuestionRequest):
             "answer": answer
         }
     except Exception as e:
-        print(f"Query error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
+
+
 
 @app.get("/status")
 def status():
-    """Check if vectorstore exists and how many documents"""
     vectorstore_exists = os.path.exists("vectorstore/index.faiss")
     uploaded_files = os.listdir(UPLOAD_DIR) if os.path.exists(UPLOAD_DIR) else []
-    
+
     return {
         "vectorstore_exists": vectorstore_exists,
         "uploaded_files": uploaded_files,
