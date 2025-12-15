@@ -57,26 +57,28 @@ def answer_question(question: str):
         return "No documents uploaded yet. Please upload a PDF first."
 
     try:
+        # Check if user is asking for a summary
         summary_keywords = ['summarize', 'summarise', 'summary', 'overview', 'brief', 'gist', 'main points']
         is_summary_request = any(keyword in question.lower() for keyword in summary_keywords)
         
         embeddings = FastEmbedEmbeddings(
-            model_name="BAAI/bge-small-en-v1.5"
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            max_length=256
         )
 
-        print("Loading vectorstore...")
+        print("📂 Loading vectorstore...")
         vectorstore = FAISS.load_local(
             VECTORSTORE_DIR,
             embeddings,
             allow_dangerous_deserialization=True
         )
 
-
+        # For summaries, get MORE chunks to cover the whole document
         if is_summary_request:
-            print("Summary request detected - fetching more chunks...")
+            print("📝 Summary request detected - fetching more chunks...")
             retriever = vectorstore.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 12}
+                search_kwargs={"k": 12}  # Get more chunks for better summary
             )
         else:
             retriever = vectorstore.as_retriever(
@@ -84,28 +86,28 @@ def answer_question(question: str):
                 search_kwargs={"k": 6}
             )
 
-        print(f"Searching for: {question}")
+        print(f"🔍 Searching for: {question}")
         docs = retriever.invoke(question)
 
-        print(f"Found {len(docs)} relevant chunks")
+        print(f"📋 Found {len(docs)} relevant chunks")
 
         if not docs:
             return "This information is not present in the document."
 
-
+        # Debug: print what we found
         for i, doc in enumerate(docs):
             print(f"\n--- Chunk {i+1} (score/relevance) ---")
             print(doc.page_content[:200] + "...")
 
         context = "\n\n---\n\n".join(d.page_content for d in docs)
 
-        
+        # Choose the right prompt based on request type
         if is_summary_request:
             final_prompt = SUMMARY_PROMPT.format(
                 context=context,
                 question=question
             )
-            max_tokens = 800
+            max_tokens = 800  # Medium length for summaries
             system_msg = "You are a helpful assistant that creates clear, medium-length summaries in natural paragraph form without bullet points or excessive formatting."
         else:
             final_prompt = PROMPT.format(
@@ -115,7 +117,7 @@ def answer_question(question: str):
             max_tokens = 500
             system_msg = "You are a concise assistant. Give short, direct answers without explanations unless specifically asked."
 
-        print(f"Sending to Groq... (Summary mode: {is_summary_request})")
+        print(f"🤖 Sending to Groq... (Summary mode: {is_summary_request})")
         response = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
@@ -127,10 +129,10 @@ def answer_question(question: str):
         )
 
         answer = response.choices[0].message.content.strip()
-        print(f"Answer: {answer[:100]}...")
+        print(f"✅ Answer: {answer[:100]}...")
         
         return answer
 
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"❌ Error: {str(e)}")
         return f"Error processing question: {str(e)}"
