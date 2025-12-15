@@ -14,6 +14,7 @@ app = FastAPI(title="Multi-Doc RAG API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -39,7 +40,6 @@ async def upload_pdf(file: UploadFile = File(...)):
         
         print(f"Uploaded: {file.filename} ({len(content)} bytes)")
         
-
         result = ingest_pdf(path)
         return {
             "status": "success",
