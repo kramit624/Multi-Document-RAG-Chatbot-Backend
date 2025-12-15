@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+langchain
+langchain-community
+pypdf
+faiss-cpu
+fastembed
+groq
+python-dotenv
+pydantic
