@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
@@ -11,6 +11,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = FastAPI(title="Multi-Doc RAG API")
 
+# 🔥 CORS FIRST
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -19,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+# 🔥 OPTIONS HANDLER
 @app.options("/{path:path}")
 async def options_handler(path: str):
     return {}
@@ -27,8 +28,22 @@ async def options_handler(path: str):
 class QuestionRequest(BaseModel):
     question: str
 
+
+# -----------------------------
+# Background ingestion task
+# -----------------------------
+def ingest_single_pdf(file_path: str):
+    ingest_pdf(file_path)
+
+
+# -----------------------------
+# Upload PDF (AUTO-INGEST)
+# -----------------------------
 @app.post("/upload")
-async def upload_pdf(file: UploadFile | None = File(None)):
+async def upload_pdf(
+    background_tasks: BackgroundTasks,
+    file: UploadFile | None = File(None)
+):
     if not file:
         raise HTTPException(status_code=400, detail="No file uploaded")
 
@@ -42,26 +57,22 @@ async def upload_pdf(file: UploadFile | None = File(None)):
         with open(path, "wb") as f:
             f.write(content)
 
+        # 🔥 AUTO INGEST (NON-BLOCKING)
+        background_tasks.add_task(ingest_single_pdf, path)
+
         return {
             "status": "uploaded",
-            "filename": file.filename
+            "filename": file.filename,
+            "ingestion": "started"
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/ingest")
-def ingest():
-    try:
-        result = ingest_pdf(UPLOAD_DIR)
-        return {
-            "status": "ingested",
-            **result
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-
+# -----------------------------
+# Ask Questions
+# -----------------------------
 @app.post("/ask")
 def ask(payload: QuestionRequest):
     if not payload.question.strip():
@@ -77,7 +88,9 @@ def ask(payload: QuestionRequest):
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
 
 
-
+# -----------------------------
+# Status
+# -----------------------------
 @app.get("/status")
 def status():
     vectorstore_exists = os.path.exists("vectorstore/index.faiss")
