@@ -14,7 +14,10 @@ app = FastAPI(title="Multi-Doc RAG API")
 # 🔥 CORS FIRST
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://multi-document-rag-chatbot-frontend-erqcaw0ap.vercel.app/"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://multi-document-rag-chatbot-frontend.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
